@@ -2,9 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.alones.reactnative.baidupush">
 
-    <uses-sdk
-        android:minSdkVersion="16"
-        android:targetSdkVersion="24" />
+    <uses-sdk android:targetSdkVersion="24" />
     <!-- Push service 运行需要的权限 -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
@@ -114,6 +112,12 @@
             <!--android:protectionLevel="signature"-->
             <!--android:writePermission="baidu.push.permission.WRITE_PUSHINFOPROVIDER.com.alones.reactnative.baidupush" />-->
 
+        <!-- Amazon Pinpoint Notification Receiver -->
+        <receiver android:name="com.amazonaws.mobileconnectors.pinpoint.targeting.notification.PinpointNotificationReceiver">
+            <intent-filter>
+                <action android:name="com.amazonaws.intent.baidu.NOTIFICATION_OPEN" />
+            </intent-filter>
+        </receiver>
         <!-- 在百度开发者中心查询应用的API Key -->
         <!-- <meta-data
             android:name="baidu_push_api_key"

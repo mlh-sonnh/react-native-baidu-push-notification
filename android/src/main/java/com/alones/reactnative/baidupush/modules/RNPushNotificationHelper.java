@@ -4,6 +4,7 @@ package com.alones.reactnative.baidupush.modules;
 import android.app.AlarmManager;
 import android.app.Application;
 import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -136,7 +137,7 @@ public class RNPushNotificationHelper {
                 return;
             }
 
-            if (bundle.getString("message") == null) {
+            if (bundle.getString("pinpoint.notification.body") == null) {
                 // this happens when a 'data' notification is received - we do not synthesize a local notification in this case
                 Log.d(LOG_TAG, "Cannot send to notification centre because there is no 'message' field in: " + bundle);
                 return;
@@ -151,11 +152,13 @@ public class RNPushNotificationHelper {
             Resources res = context.getResources();
             String packageName = context.getPackageName();
 
-            String title = bundle.getString("title");
+            String title = bundle.getString("pinpoint.notification.title");
             if (title == null) {
                 ApplicationInfo appInfo = context.getApplicationInfo();
                 title = context.getPackageManager().getApplicationLabel(appInfo).toString();
             }
+
+            String channelId = bundle.getString("channelId");
 
             NotificationCompat.Builder notification = new NotificationCompat.Builder(context)
                     .setContentTitle(title)
@@ -169,7 +172,7 @@ public class RNPushNotificationHelper {
                 notification.setGroup(group);
             }
 
-            notification.setContentText(bundle.getString("message"));
+            notification.setContentText(bundle.getString("pinpoint.notification.body"));
 
             String largeIcon = bundle.getString("largeIcon");
 
@@ -274,6 +277,16 @@ public class RNPushNotificationHelper {
             NotificationManager notificationManager = notificationManager();
 
             notification.setContentIntent(pendingIntent);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            {
+                NotificationChannel channel = new NotificationChannel(
+                        channelId,
+                        "Channel baidu",
+                        NotificationManager.IMPORTANCE_HIGH);
+                notificationManager.createNotificationChannel(channel);
+                notification.setChannelId(channelId);
+            }
 
             if (!bundle.containsKey("vibrate") || bundle.getBoolean("vibrate")) {
                 long vibration = bundle.containsKey("vibration") ? (long) bundle.getDouble("vibration") : DEFAULT_VIBRATION;

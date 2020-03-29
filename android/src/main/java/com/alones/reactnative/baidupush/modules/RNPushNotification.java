@@ -10,6 +10,12 @@ import android.content.IntentFilter;
 import android.os.Bundle;
 import android.util.Log;
 
+import com.amazonaws.mobile.client.AWSMobileClient;
+import com.amazonaws.mobile.client.Callback;
+import com.amazonaws.mobile.client.UserStateDetails;
+import com.amazonaws.mobile.config.AWSConfiguration;
+import com.amazonaws.mobileconnectors.pinpoint.PinpointConfiguration;
+import com.amazonaws.mobileconnectors.pinpoint.PinpointManager;
 import com.baidu.android.pushservice.PushConstants;
 import com.baidu.android.pushservice.PushManager;
 import com.facebook.react.bridge.ActivityEventListener;
@@ -45,6 +51,35 @@ public class RNPushNotification extends ReactContextBaseJavaModule implements Ac
         mRNPushNotificationHelper = new RNPushNotificationHelper(applicationContext);
         // This is used to delivery callbacks to JS
         mJsDelivery = new RNPushNotificationJsDelivery(reactContext);
+    }
+
+    private static PinpointManager pinpointManager;
+
+    public static PinpointManager getPinpointManager(final Context applicationContext) {
+        if (pinpointManager == null) {
+            final AWSConfiguration awsConfig = new AWSConfiguration(applicationContext);
+            AWSMobileClient.getInstance().initialize(applicationContext, awsConfig, new Callback<UserStateDetails>() {
+                @Override
+                public void onResult(UserStateDetails userStateDetails) {
+                    Log.i("INIT", userStateDetails.getUserState().toString());
+
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    Log.e("INIT", "Initialization error.", e);
+                }
+            });
+
+            PinpointConfiguration pinpointConfig = new PinpointConfiguration(
+                    applicationContext,
+                    AWSMobileClient.getInstance(),
+                    awsConfig);
+
+            pinpointManager = new PinpointManager(pinpointConfig);
+
+        }
+        return pinpointManager;
     }
 
     @Override

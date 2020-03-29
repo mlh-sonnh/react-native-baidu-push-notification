@@ -5,9 +5,9 @@ var { NativeModules, DeviceEventEmitter } = require('react-native');
 var RNPushNotification = NativeModules.RNPushNotification;
 var _notifHandlers = new Map();
 
-var DEVICE_NOTIF_EVENT = 'remoteNotificationReceived';
-var NOTIF_REGISTER_EVENT = 'remoteNotificationsRegistered';
-var REMOTE_FETCH_EVENT = 'remoteFetch';
+var DEVICE_NOTIF_EVENT = 'remoteNotificationReceivedBaidu';
+var NOTIF_REGISTER_EVENT = 'remoteNotificationsRegisteredBaidu';
+var REMOTE_FETCH_EVENT = 'remoteFetchBaidu';
 
 var NotificationsComponent = function () {};
 

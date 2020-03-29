@@ -8,6 +8,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.amazonaws.mobileconnectors.pinpoint.targeting.notification.NotificationClient;
+import com.amazonaws.mobileconnectors.pinpoint.targeting.notification.NotificationDetails;
 import com.baidu.android.pushservice.PushMessageReceiver;
 import com.facebook.react.ReactApplication;
 import com.facebook.react.ReactInstanceManager;
@@ -34,18 +36,27 @@ public class BaiduPushMessageReceiver extends PushMessageReceiver {
         void contextInitialized(ReactApplicationContext context);
     }
 
+    private static String channelBaiduId;
+
     @Override
     public void onBind(Context context, int errorCode, String appid, String userId, final String channelId,
-            String requestId) {
+                       String requestId) {
         Log.d(LOG_TAG, "onBind");
+        final NotificationClient notificationClient = RNPushNotification.getPinpointManager(context).getNotificationClient();
+        notificationClient.registerDeviceToken(userId, channelId);
+        channelBaiduId = channelId;
+
+        final String deviceToken = notificationClient.getDeviceToken();
+
         Context applicationContext = context.getApplicationContext();
+        Log.d(LOG_TAG, deviceToken);
         handleEvent(applicationContext, new ReactContextInitListener() {
             @Override
             public void contextInitialized(ReactApplicationContext context) {
                 WritableMap params = Arguments.createMap();
-                params.putString("deviceToken", channelId);
+                params.putString("deviceToken", deviceToken);
                 RNPushNotificationJsDelivery jsDelivery = new RNPushNotificationJsDelivery(context);
-                jsDelivery.sendEvent("remoteNotificationsRegistered", params);
+                jsDelivery.sendEvent("remoteNotificationsRegisteredBaidu", params);
             }
         });
     }
@@ -53,25 +64,77 @@ public class BaiduPushMessageReceiver extends PushMessageReceiver {
     @Override
     public void onMessage(Context context, String message, String customContentString) {
         Log.d(LOG_TAG, "onMessage");
-        JSONObject data = getPushData(message);
-        final Bundle bundle = createBundleFromMessage(message);
-        if (data != null) {
-            final int badge = data.optInt("badge", -1);
-            if (badge >= 0) {
-                ApplicationBadgeHelper.INSTANCE.setApplicationIconBadgeNumber(context, badge);
+        final NotificationClient notificationClient = RNPushNotification.getPinpointManager(context).getNotificationClient();
+        final NotificationDetails details = NotificationDetails.builder()
+                .message(message)
+                .intentAction(NotificationClient.BAIDU_INTENT_ACTION)
+                .build();
+
+        NotificationClient.CampaignPushResult pushResult = notificationClient.handleCampaignPush(details);
+
+        final Boolean isForeground = isApplicationInForeground(context);
+        final Bundle bundle = details.getBundle();
+        bundle.putBoolean("foreground", isForeground);
+
+        if (!NotificationClient.CampaignPushResult.NOT_HANDLED.equals(pushResult)) {
+            /**
+             The push message was due to a Pinpoint campaign.
+             If the app was in the background, a local notification was added
+             in the notification center. If the app was in the foreground, an
+             event was recorded indicating the app was in the foreground,
+             for the demo, we will broadcast the notification to let the main
+             activity display it in a dialog.
+             */
+            if (NotificationClient.CampaignPushResult.APP_IN_FOREGROUND.equals(pushResult)) {
+                /* Create a message that will display the raw data of the campaign push in a dialog. */
+                handleEvent(context, new ReactContextInitListener() {
+                    @Override
+                    public void contextInitialized(ReactApplicationContext context) {
+                        handleRemotePushNotification(context, bundle);
+                    }
+                });
+            }
+
+            if (NotificationClient.CampaignPushResult.POSTED_NOTIFICATION.equals((details))) {
+                bundle.putString("isForeground", isForeground.toString());
+                handleEvent(context, new ReactContextInitListener() {
+                    @Override
+                    public void contextInitialized(ReactApplicationContext context) {
+                        RNPushNotificationJsDelivery jsDelivery = new RNPushNotificationJsDelivery(context);
+                        jsDelivery.notifyNotification(bundle);
+                    }
+                });
             }
         }
+    }
 
-        Context applicationContext = context.getApplicationContext();
+    private void handleRemotePushNotification(ReactApplicationContext context, Bundle bundle) {
 
-        Log.v(LOG_TAG, "onMessageReceived: " + bundle);
+        // If notification ID is not provided by the user for push notification, generate one at random
+        if (bundle.getString("id") == null) {
+            Random randomNumberGenerator = new Random(System.currentTimeMillis());
+            bundle.putString("id", String.valueOf(randomNumberGenerator.nextInt()));
+        }
 
-        handleEvent(applicationContext, new ReactContextInitListener() {
-            @Override
-            public void contextInitialized(ReactApplicationContext context) {
-                handleRemotePushNotification(context, bundle);
-            }
-        });
+
+        Boolean isForeground = isApplicationInForeground(context);
+
+        RNPushNotificationJsDelivery jsDelivery = new RNPushNotificationJsDelivery(context);
+        bundle.putBoolean("foreground", isForeground);
+        bundle.putBoolean("userInteraction", false);
+        jsDelivery.notifyNotification(bundle);
+
+        // If contentAvailable is set to true, then send out a remote fetch event
+        if (bundle.getString("contentAvailable", "false").equalsIgnoreCase("true")) {
+            jsDelivery.notifyRemoteFetch(bundle);
+        }
+
+        Log.v(LOG_TAG, "sendNotification: " + bundle);
+
+        bundle.putString("channelId", channelBaiduId);
+        Application applicationContext = (Application) context.getApplicationContext();
+        RNPushNotificationHelper pushNotificationHelper = new RNPushNotificationHelper(applicationContext);
+        pushNotificationHelper.sendToNotificationCentre(bundle);
     }
 
     private void handleEvent(final Context applicationContext, final ReactContextInitListener reactContextInitListener) {
@@ -84,7 +147,7 @@ public class BaiduPushMessageReceiver extends PushMessageReceiver {
                 // Construct and load our normal React JS code bundle
                 if (applicationContext instanceof ReactApplication) {
                     ReactInstanceManager mReactInstanceManager = ((ReactApplication) applicationContext).getReactNativeHost().getReactInstanceManager();
-                    com.facebook.react.bridge.ReactContext context = mReactInstanceManager.getCurrentReactContext();
+                    ReactContext context = mReactInstanceManager.getCurrentReactContext();
                     // If it's constructed, send a notification
                     if (context != null) {
                         reactContextInitListener.contextInitialized((ReactApplicationContext) context);
@@ -103,61 +166,6 @@ public class BaiduPushMessageReceiver extends PushMessageReceiver {
                 }
             }
         });
-    }
-
-    private Bundle createBundleFromMessage(String message) {
-        JSONObject jsonObject;
-        Bundle extras = null;
-        try {
-            jsonObject = new JSONObject(message);
-            extras = new Bundle();
-            extras.putString(BaiduPushConstants.TITLE, jsonObject.optString(BaiduPushConstants.TITLE));
-            extras.putString(BaiduPushConstants.MESSAGE, jsonObject.optString(BaiduPushConstants.DESCRIPTION));
-            JSONObject customContent = jsonObject.optJSONObject(BaiduPushConstants.CUSTOM_CONTENT);
-            if (customContent != null) {
-                extras.putString(BaiduPushConstants.DATA, jsonObject.optJSONObject(BaiduPushConstants.CUSTOM_CONTENT).toString());
-            }
-        } catch (JSONException e) {
-            Log.e(LOG_TAG, e.getMessage());
-        }
-        return extras;
-    }
-
-    private JSONObject getPushData(String dataString) {
-        try {
-            return new JSONObject(dataString);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private void handleRemotePushNotification(ReactApplicationContext context, Bundle bundle) {
-
-        // If notification ID is not provided by the user for push notification, generate one at random
-        if (bundle.getString("id") == null) {
-            Random randomNumberGenerator = new Random(System.currentTimeMillis());
-            bundle.putString("id", String.valueOf(randomNumberGenerator.nextInt()));
-        }
-
-        Boolean isForeground = isApplicationInForeground(context);
-
-        RNPushNotificationJsDelivery jsDelivery = new RNPushNotificationJsDelivery(context);
-        bundle.putBoolean("foreground", isForeground);
-        bundle.putBoolean("userInteraction", false);
-        jsDelivery.notifyNotification(bundle);
-
-        // If contentAvailable is set to true, then send out a remote fetch event
-        if (bundle.getString("contentAvailable", "false").equalsIgnoreCase("true")) {
-            jsDelivery.notifyRemoteFetch(bundle);
-        }
-
-        Log.v(LOG_TAG, "sendNotification: " + bundle);
-
-        if (!isForeground) {
-            Application applicationContext = (Application) context.getApplicationContext();
-            RNPushNotificationHelper pushNotificationHelper = new RNPushNotificationHelper(applicationContext);
-            pushNotificationHelper.sendToNotificationCentre(bundle);
-        }
     }
 
     private boolean isApplicationInForeground(Context context) {
