@@ -44,7 +44,7 @@ dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
     testCompile 'junit:junit:4.12'
     compile 'com.facebook.react:react-native:+'
-    compile files('libs/pushservice-5.7.1.65.jar')
+    compile files('libs/pushservice-6.7.3.20.jar')
     compile 'me.leolin:ShortcutBadger:1.1.8@aar'
     implementation 'com.amazonaws:aws-android-sdk-cognitoidentityprovider:2.15.2'
     implementation 'com.amazonaws:aws-android-sdk-pinpoint:2.15.+'
