@@ -131,6 +131,8 @@ public class RNPushNotification extends ReactContextBaseJavaModule implements Ac
     public void requestPermissions(String senderID) {
         PushManager.startWork(getReactApplicationContext(), PushConstants.LOGIN_TYPE_API_KEY,
                 Utils.getMetaValue(getReactApplicationContext(), "baidu_push_api_key"));
+        PushManager.stopWork(getReactApplicationContext());
+        PushManager.resumeWork(getReactApplicationContext());
     }
 
     @ReactMethod
